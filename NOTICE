@@ -1,0 +1,13 @@
+ZeroClaw Codex Image Gen
+https://github.com/mamachanko/zeroclaw-codex-image-gen
+
+The wit/v0 directory contains the unmodified ZeroClaw plugin WIT contract,
+vendored from zeroclaw-labs/zeroclaw at commit
+9cd75ac349584bf62516ef101a77cf17617db1d8 via zeroclaw-labs/zeroclaw-plugins.
+
+Upstream project: https://github.com/zeroclaw-labs/zeroclaw
+Copyright (c) 2025 ZeroClaw Labs.
+The contract is available under MIT OR Apache-2.0. The accompanying upstream
+licenses are preserved in wit/LICENSE-MIT and wit/LICENSE-APACHE.
+
+Project-specific Rust, Python, and documentation are covered by LICENSE.
