@@ -46,7 +46,7 @@ jobs:
           path: dist
       - name: Verify package checksum
         working-directory: dist
-        run: sha256sum --check *.sha256
+        run: sha256sum --check ./*.sha256
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
