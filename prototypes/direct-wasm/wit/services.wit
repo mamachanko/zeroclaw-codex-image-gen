@@ -1,0 +1,46 @@
+// PROPOSAL ONLY. Stock ZeroClaw does not implement these imports.
+package zeroclaw:proposed-image-services@0.1.0;
+
+interface codex-auth {
+    record credentials {
+        access-token: string,
+        account-id: string,
+    }
+
+    enum auth-error {
+        access-denied,
+        login-required,
+        unavailable,
+    }
+
+    // Host selects the explicitly bound profile from current instance config,
+    // refreshes it through its existing AuthService, and returns a transient
+    // access token. The guest cannot select a profile or obtain refresh tokens.
+    get: func() -> result<credentials, auth-error>;
+}
+
+interface artifacts {
+    record image {
+        path: string,
+        size-bytes: u64,
+    }
+
+    enum artifact-error {
+        access-denied,
+        invalid-image,
+        quota-exceeded,
+        unavailable,
+    }
+
+    // Host validates image bytes and writes to an instance-scoped directory
+    // inside the authorized workspace. Guest supplies no path or file name.
+    save-image: func(bytes: list<u8>) -> result<image, artifact-error>;
+}
+
+world direct-image-plugin {
+    import codex-auth;
+    import artifacts;
+    import zeroclaw:plugin/logging@0.1.0;
+    export zeroclaw:plugin/plugin-info@0.1.0;
+    export zeroclaw:plugin/tool@0.1.0;
+}
