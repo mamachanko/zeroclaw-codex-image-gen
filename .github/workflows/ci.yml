@@ -4,46 +4,88 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  workflows:
+    name: Workflow validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Validate GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color
+
   bridge:
-    runs-on: ubuntu-latest
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         python: ['3.10', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python }}
       - run: python3 -m unittest discover -s bridge -p 'test_*.py' -v
 
   component:
-    runs-on: ubuntu-latest
+    name: Rust and WASM package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install the repository's pinned Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
-          targets: wasm32-wasip2
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       - run: cargo test --locked
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo clippy --locked --target wasm32-wasip2 -- -D warnings
       - run: cargo build --locked --target wasm32-wasip2 --release
       - run: python3 tools/package.py
-      - uses: actions/upload-artifact@v4
+      - name: Verify the installable archive
+        run: python3 -m zipfile --test dist/codex-image-gen-*.zip
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: codex-image-gen-package
           path: |
             dist/*.zip
             dist/*.sha256
           if-no-files-found: error
+          retention-days: 30
+
+  required:
+    name: Required checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: ${{ always() }}
+    needs: [workflows, bridge, component]
+    steps:
+      - name: Require every test and build job to succeed
+        env:
+          JOB_RESULTS: ${{ join(needs.*.result, ',') }}
+        run: |
+          test "$JOB_RESULTS" = 'success,success,success'
