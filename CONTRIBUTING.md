@@ -48,6 +48,14 @@ The supplied ruleset requires PRs and successful CI without a separate reviewer
 approval, so a single-maintainer repository can still merge its own PRs. It has
 no bypass actors and accepts the required check only from GitHub Actions.
 
+## Direct WASM prototype
+
+The proposed replacement is reviewed separately in
+[`docs/direct-wasm.md`](docs/direct-wasm.md). Its standalone crate is in
+`prototypes/direct-wasm`; run the same Rust checks there when changing it.
+CI validates that crate as an additional required job. It is not packaged or
+released because stock ZeroClaw does not implement its proposed host services.
+
 ## Releases
 
 After the changes have merged, a maintainer can publish a release by creating

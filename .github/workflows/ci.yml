@@ -44,6 +44,29 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python3 -m unittest discover -s bridge -p 'test_*.py' -v
 
+  direct-wasm:
+    name: Direct WASM prototype
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: prototypes/direct-wasm
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install the repository's pinned Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
+        with:
+          workspaces: prototypes/direct-wasm -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --check
+      - run: cargo test --locked
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --locked --target wasm32-wasip2 -- -D warnings
+      - run: cargo build --locked --target wasm32-wasip2 --release
+
   component:
     name: Rust and WASM package
     runs-on: ubuntu-24.04
@@ -82,10 +105,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: ${{ always() }}
-    needs: [workflows, bridge, component]
+    needs: [workflows, bridge, component, direct-wasm]
     steps:
       - name: Require every test and build job to succeed
         env:
           JOB_RESULTS: ${{ join(needs.*.result, ',') }}
         run: |
-          test "$JOB_RESULTS" = 'success,success,success'
+          test "$JOB_RESULTS" = 'success,success,success,success'

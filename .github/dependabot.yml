@@ -8,7 +8,7 @@ updates:
       actions:
         patterns: ['*']
   - package-ecosystem: cargo
-    directory: /
+    directories: ['/', '/prototypes/direct-wasm']
     schedule:
       interval: weekly
     groups:
