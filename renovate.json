@@ -1,29 +1,14 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "enabledManagers": ["cargo", "github-actions"],
+  "enabledManagers": ["cargo"],
   "timezone": "Etc/UTC",
   "automerge": false,
   "separateMajorMinor": false,
   "packageRules": [
     {
-      "matchManagers": ["github-actions"],
-      "groupName": "actions",
-      "pinDigests": true
-    },
-    {
       "matchManagers": ["cargo"],
       "groupName": "rust-dependencies"
-    },
-    {
-      "matchManagers": ["github-actions"],
-      "matchDepTypes": ["github-runner", "uses-with"],
-      "enabled": false
-    },
-    {
-      "matchManagers": ["github-actions"],
-      "matchPackageNames": ["ghcr.io/renovatebot/renovate"],
-      "enabled": true
     }
   ]
 }

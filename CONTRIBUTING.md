@@ -22,52 +22,73 @@ python3 tools/package.py
 PR CI validates workflows, runs Python tests, Rust tests and lint checks, builds the WASM component,
 and uploads the installable ZIP and checksum. The final `Required checks` job
 fails if any dependency fails, is skipped, or is cancelled. CI also runs on
-`main`, merge queues, and manual requests. Workflows use read-only permissions
-except for the release publication job, and PR runs do not use account secrets.
+`main`, merge queues, and manual requests. Workflows default to read-only
+permissions. Release publication and scheduled Renovate jobs have scoped write
+permissions; PR CI does not use account secrets.
 
 ## Dependency updates
 
-[Renovate Bot GitHub Action](https://github.com/renovatebot/github-action) runs
-nightly at **03:17 UTC**, or manually through **Actions → Renovate → Run workflow**.
-The workflow runs from `main` and targets only this repository. The hosted
-Renovate GitHub App is not required.
+[Renovate](.github/workflows/renovate.yml) runs its pinned
+`ghcr.io/renovatebot/renovate:44.247.2` Docker image directly, nightly at
+**03:17 UTC** or through **Actions → Renovate → Run workflow**. This follows
+[Pink’s working setup](https://github.com/mamachanko/pink/blob/f29920a53e08de127b16a4919791038e1b6b72fe/.github/workflows/renovate.yml).
+
+It uses GitHub’s built-in `GITHUB_TOKEN`. No personal access token, Renovate
+account, hosted app, or repository secret is needed. `RENOVATE_TOKEN` inside
+the container is simply Renovate’s environment variable for that built-in token.
+The job grants Contents, Issues and Pull requests write permissions, targets
+only this repository on `main`, and skips onboarding. Its identity is
+`github-actions[bot]`. Runs are serialized, and the timeout is 60 minutes.
+
+### One-time setup
+
+1. In **Settings → Actions → General → Workflow permissions**, enable
+   **Allow GitHub Actions to create and approve pull requests**. GitHub Actions
+   and repository Issues must also be enabled; the recommended Renovate preset
+   uses a Dependency Dashboard issue.
+2. If the hosted Renovate app previously served this repository, remove this
+   repository from that app’s access to avoid competing bots.
+3. Merge the workflow to `main`, then run it manually once and inspect its logs
+   and Dependency Dashboard. GitHub schedules use the default branch and may
+   be delayed. No update PR is expected when dependencies are current.
+
+### What gets updated
 
 Renovate manages Cargo dependencies in both the root crate and
-`prototypes/direct-wasm`, plus GitHub Actions references. Updates are grouped
-into `rust-dependencies` and `actions` PRs, including major updates. Action
-references remain pinned to commit digests. CI runner and language-version
-settings stay manually maintained. The Renovate action and its pinned bot
-version are maintained in the `actions` update group. Dependency PRs use the
-normal CI and review process; automerging is disabled.
+`prototypes/direct-wasm`. Updates, including major updates, are grouped into
+`rust-dependencies` PRs. Automerging is disabled.
 
-### One-time authentication setup
+The built-in token cannot update workflow files, so the GitHub Actions manager
+is disabled. Review action commit pins and the Renovate Docker image version
+manually. CI runner and language-version pins also remain manually maintained.
+The dependency policy has no additional weekly schedule; every nightly run can
+create Cargo updates.
 
-Create a [classic personal access token](https://github.com/settings/tokens)
-with **public_repo** and **workflow** scopes, following the action's
-[authentication instructions](https://github.com/renovatebot/github-action#token).
-Store it as the repository Actions secret **`RENOVATE_TOKEN`** in
-**Settings → Secrets and variables → Actions**. Use an appropriate expiry and
-replace the secret when the token expires. A private repository needs `repo`
-instead of `public_repo`.
+### CI for bot-created PRs
 
-The PAT lets Renovate update workflow files and trigger the normal PR CI.
-Using the default `GITHUB_TOKEN` would require manual approval for bot-created
-PR workflows and does not provide the documented `workflow` token scope.
-The job's default token remains read-only; only the bot action receives the PAT.
-A maintainer must add the secret before the first run. A missing secret fails
-with a clear setup message.
+GitHub may require maintainer approval before CI runs on a PR created with
+`GITHUB_TOKEN`. Approve the pending workflow when GitHub offers that option.
+If no run is created, use **Actions → CI → Run workflow**, select the PR’s
+current head branch, and enter its number in the `pull_request` field.
 
-If the hosted Renovate app was enabled previously, disable it for this
-repository so only the action runs. Action-created branches use
-`renovate-action/`. The workflow runs only on its nightly schedule or a manual
-request; it never runs on pull requests.
+The same fallback is available from the CLI. Replace this example’s branch and
+PR number with the actual PR values:
 
-Bot execution settings are in `.github/workflows/renovate.yml`; dependency
-policy is in `renovate.json`. The repository policy has no additional weekly
-schedule, so every nightly run can create updates. PR CI validates workflow
-syntax without invoking the bot.
+```bash
+gh workflow run ci.yml --repo mamachanko/zeroclaw-codex-image-gen \
+  --ref renovate/rust-dependencies -f pull_request=123
+```
 
-To validate configuration changes with Node.js 24.11 or newer in the 24.x line:
+The `Verify CI target` job checks that the PR is open, belongs to this
+repository, and has the exact branch and commit selected for the run. A stale
+or unrelated run fails the gate. The normal `Required checks` job still
+requires every validation and build job to pass. General manual CI runs can
+omit the PR number; selecting a PR number activates the stricter check.
+Review CodeQL status as well, and do not bypass required checks.
+
+Execution settings are in `.github/workflows/renovate.yml`; policy is in
+`renovate.json`. The write-enabled bot never runs on PR events. To validate
+configuration changes with Node.js 24.11 or newer in the 24.x line:
 
 ```bash
 npx --yes --package=renovate@44.247.2 renovate-config-validator --strict renovate.json
