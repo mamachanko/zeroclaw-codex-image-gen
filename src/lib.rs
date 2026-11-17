@@ -32,9 +32,14 @@ mod component {
         let client = waki::Client::new();
         let base = format!("http://127.0.0.1:{}", call.port);
         let builder = match call.request {
-            Request::Generate { prompt, transparent_background } => client
-                .post(&format!("{base}/v1/jobs"))
-                .json(&serde_json::json!({"prompt": prompt, "transparent_background": transparent_background})),
+            Request::Generate { prompt, transparent_background } => {
+                let body = serde_json::json!({"prompt": prompt, "transparent_background": transparent_background}).to_string();
+                client
+                    .post(&format!("{base}/v1/jobs"))
+                    .header("Content-Type", "application/json")
+                    .header("Content-Length", body.len().to_string())
+                    .body(body)
+            }
             Request::Status { job_id } => client.get(&format!("{base}/v1/jobs/{job_id}")),
         };
         let response = builder
