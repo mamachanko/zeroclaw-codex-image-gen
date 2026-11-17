@@ -3,7 +3,6 @@
   "extends": ["config:recommended"],
   "enabledManagers": ["cargo", "github-actions"],
   "timezone": "Etc/UTC",
-  "schedule": ["* 0-5 * * 1"],
   "automerge": false,
   "separateMajorMinor": false,
   "packageRules": [
@@ -20,6 +19,11 @@
       "matchManagers": ["github-actions"],
       "matchDepTypes": ["github-runner", "uses-with"],
       "enabled": false
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ghcr.io/renovatebot/renovate"],
+      "enabled": true
     }
   ]
 }

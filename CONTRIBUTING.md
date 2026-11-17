@@ -27,18 +27,45 @@ except for the release publication job, and PR runs do not use account secrets.
 
 ## Dependency updates
 
-[Renovate](https://github.com/apps/renovate) manages Cargo dependencies in both
-the root crate and `prototypes/direct-wasm`, plus GitHub Actions references.
-Updates are grouped into `rust-dependencies` and `actions` PRs, including major
-updates, and scheduled for Mondays from 00:00 to 05:59 UTC. Action references
-remain pinned to commit digests. CI runner and language-version settings stay
-manually maintained. Dependency PRs use the normal CI and review process;
-automerging is disabled.
+[Renovate Bot GitHub Action](https://github.com/renovatebot/github-action) runs
+nightly at **03:17 UTC**, or manually through **Actions → Renovate → Run workflow**.
+The workflow runs from `main` and targets only this repository. The hosted
+Renovate GitHub App is not required.
 
-The hosted Renovate GitHub App must have access to this repository. Enable it
-for `mamachanko/zeroclaw-codex-image-gen` when adopting this configuration; the
-JSON file alone does not run the bot. No Renovate workflow or repository token
-is needed when using the hosted app. The configuration is in `renovate.json`.
+Renovate manages Cargo dependencies in both the root crate and
+`prototypes/direct-wasm`, plus GitHub Actions references. Updates are grouped
+into `rust-dependencies` and `actions` PRs, including major updates. Action
+references remain pinned to commit digests. CI runner and language-version
+settings stay manually maintained. The Renovate action and its pinned bot
+version are maintained in the `actions` update group. Dependency PRs use the
+normal CI and review process; automerging is disabled.
+
+### One-time authentication setup
+
+Create a [classic personal access token](https://github.com/settings/tokens)
+with **public_repo** and **workflow** scopes, following the action's
+[authentication instructions](https://github.com/renovatebot/github-action#token).
+Store it as the repository Actions secret **`RENOVATE_TOKEN`** in
+**Settings → Secrets and variables → Actions**. Use an appropriate expiry and
+replace the secret when the token expires. A private repository needs `repo`
+instead of `public_repo`.
+
+The PAT lets Renovate update workflow files and trigger the normal PR CI.
+Using the default `GITHUB_TOKEN` would require manual approval for bot-created
+PR workflows and does not provide the documented `workflow` token scope.
+The job's default token remains read-only; only the bot action receives the PAT.
+A maintainer must add the secret before the first run. A missing secret fails
+with a clear setup message.
+
+If the hosted Renovate app was enabled previously, disable it for this
+repository so only the action runs. Action-created branches use
+`renovate-action/`. The workflow runs only on its nightly schedule or a manual
+request; it never runs on pull requests.
+
+Bot execution settings are in `.github/workflows/renovate.yml`; dependency
+policy is in `renovate.json`. The repository policy has no additional weekly
+schedule, so every nightly run can create updates. PR CI validates workflow
+syntax without invoking the bot.
 
 To validate configuration changes with Node.js 24.11 or newer in the 24.x line:
 
