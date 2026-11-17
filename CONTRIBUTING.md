@@ -15,12 +15,14 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 cargo clippy --locked --target wasm32-wasip2 -- -D warnings
 cargo build --locked --target wasm32-wasip2 --release
-python3 -m unittest discover -s bridge -p 'test_*.py' -v
+python3 -m unittest discover -s tools -p 'test_*.py' -v
 python3 tools/package.py
 ```
 
-PR CI validates workflows, runs Python tests, Rust tests and lint checks, builds the WASM component,
-and uploads the installable ZIP and checksum. The final `Required checks` job
+PR CI validates workflows, runs development-tooling tests, Rust tests and lint
+checks, builds the WASM component, and uploads a development ZIP and checksum.
+Python 3.11+ is used only for development tooling; the package contains no
+Python code. The final `Required checks` job
 fails if any dependency fails, is skipped, or is cancelled. CI also runs on
 `main`, merge queues, and manual requests. Workflows default to read-only
 permissions. Release publication and scheduled Renovate jobs have scoped write
@@ -54,8 +56,8 @@ only this repository on `main`, and skips onboarding. Its identity is
 
 ### What gets updated
 
-Renovate manages Cargo dependencies in both the root crate and
-`prototypes/direct-wasm`. Updates, including major updates, are grouped into
+Renovate manages the root crate's Cargo dependencies.
+Updates, including major updates, are grouped into
 `rust-dependencies` PRs. Automerging is disabled.
 
 The built-in token cannot update workflow files, so the GitHub Actions manager
@@ -117,18 +119,23 @@ The supplied ruleset requires PRs and successful CI without a separate reviewer
 approval, so a single-maintainer repository can still merge its own PRs. It has
 no bypass actors and accepts the required check only from GitHub Actions.
 
-## Direct WASM prototype
+## Direct WASM implementation
 
-The proposed replacement is reviewed separately in
-[`docs/direct-wasm.md`](docs/direct-wasm.md). Its standalone crate is in
-`prototypes/direct-wasm`; run the same Rust checks there when changing it.
-CI validates that crate as an additional required job. It is not packaged or
-released because stock ZeroClaw does not implement its proposed host services.
+The root crate is the direct WASM implementation; there is no companion
+service or separate prototype crate. Its host contract and integration gates
+are described in [`docs/direct-wasm.md`](docs/direct-wasm.md).
+Stock ZeroClaw does not implement its proposed auth and artifact services.
+CI packages the component for review, not for installation on an unmodified host.
 
 ## Releases
 
-After the changes have merged, a maintainer can publish a release by creating
-and pushing a version tag, for example `v0.1.0`. The tag must match
+**Public releases are currently blocked.** `tools/check_release_ready.py`
+rejects the active `zeroclaw:proposed-image-services` contract before publication.
+Replacing that namespace alone does not establish compatibility: complete the
+host integration and live-validation gates in `docs/direct-wasm.md` first.
+
+Once those gates are met and the contract is supported, a maintainer can
+publish a release by creating and pushing a version tag. The tag must match
 `manifest.toml` and point to a commit reachable from `main`.
 
 The release workflow reruns CI, downloads its package artifact, verifies the

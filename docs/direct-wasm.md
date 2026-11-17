@@ -1,6 +1,7 @@
-# Proposal: a manifest and a WASM component
+# Direct WASM integration
 
-Status: prototype for contract review. **Stock ZeroClaw cannot run it.**
+Status: the root implementation is bridge-free. **Stock ZeroClaw cannot run
+it yet.** The auth and artifact imports remain proposed host APIs.
 
 The intended installation is a plugin package with `manifest.toml` and its
 WASM component, followed by an explicit grant to use an existing Codex login.
@@ -12,8 +13,9 @@ make installation smaller but require maintenance every time it expires.
 
 ## Existing host boundaries
 
-The inspected host is ZeroClaw commit `6e83982`. Its pinned plugin WIT contract
-is vendored unchanged in this repository.
+The host was rechecked at ZeroClaw master commit `cda933e6` on 2026-11-17.
+The separately pinned stable plugin WIT in `wit/v0` remains unchanged; its
+source revision is recorded in `NOTICE`.
 
 | Need | What the current host provides | What is missing |
 |---|---|---|
@@ -24,14 +26,14 @@ is vendored unchanged in this repository.
 
 Source references:
 
-- [`PluginState::new`](https://github.com/zeroclaw-labs/zeroclaw/blob/6e83982/crates/zeroclaw-plugins/src/component.rs) builds `WasiCtx::builder().build()` without filesystem preopens. The same file implements instance-scoped secret reads.
-- [`PluginHostServices`](https://github.com/zeroclaw-labs/zeroclaw/blob/6e83982/crates/zeroclaw-plugins/src/services.rs) carries config and state services, with no provider-auth or image-artifact backend.
-- [`AuthService`](https://github.com/zeroclaw-labs/zeroclaw/blob/6e83982/crates/zeroclaw-providers/src/auth/mod.rs) already owns profile selection, encrypted token persistence, and OpenAI token refresh.
+- [`PluginState::new`](https://github.com/zeroclaw-labs/zeroclaw/blob/cda933e6b9937deacbcc0d4d2cd7f1ae5bb4500e/crates/zeroclaw-plugins/src/component.rs) builds `WasiCtx::builder().build()` without filesystem preopens. The same file implements instance-scoped secret reads.
+- [`PluginHostServices`](https://github.com/zeroclaw-labs/zeroclaw/blob/cda933e6b9937deacbcc0d4d2cd7f1ae5bb4500e/crates/zeroclaw-plugins/src/services.rs) carries config and state services, with no provider-auth or image-artifact backend.
+- [`AuthService`](https://github.com/zeroclaw-labs/zeroclaw/blob/cda933e6b9937deacbcc0d4d2cd7f1ae5bb4500e/crates/zeroclaw-providers/src/auth/mod.rs) already owns profile selection, encrypted token persistence, and OpenAI token refresh.
 - [Codex's image client](https://github.com/openai/codex/blob/662a634/codex-rs/codex-api/src/endpoint/images.rs) posts a typed image-generation request to the provider's `images/generations` endpoint.
 
 ## Proposed host contract
 
-The [prototype WIT](../prototypes/direct-wasm/wit/services.wit) is deliberately
+The [active WIT](../wit/direct/services.wit) is deliberately
 in a new `zeroclaw:proposed-image-services` package. It does not masquerade as an
 existing ZeroClaw API and does not modify the vendored stable contract.
 
@@ -49,7 +51,7 @@ another profile. Refresh tokens and persistent token storage remain host-owned.
 Failures use detail-free `access-denied`, `login-required`, and `unavailable`
 variants. A revoked grant must take effect on the next call.
 
-The prototype receives an access token in guest memory, like an explicitly
+The component receives an access token in guest memory, like an explicitly
 granted API credential. Before accepting the contract, host reviewers should
 decide whether that disclosure is appropriate or whether the host should inject
 authentication into a destination-bound HTTP request instead. The latter can
@@ -83,11 +85,11 @@ It does not manage login, spawn Codex, select arbitrary endpoints, or retry a
 generation automatically. Authentication, endpoint access and billing remain
 subject to the account's Codex entitlements.
 
-The prototype fixes the model to Codex's observed `gpt-image-2`, requests one
+The component fixes the model to Codex's observed `gpt-image-2`, requests one
 image, supports transparency, and bounds images to 8 MiB. Backend protocol and
-entitlement behavior remain unverified against a live subscription. The
-prototype checks response size after WAKI receives the body; the production
-transport must also enforce an input bound while reading it.
+entitlement behavior remain unverified against a live subscription. The HTTP
+shim reads successful responses in bounded chunks, aborting after the base64
+image limit plus 64 KiB of JSON overhead. Error response bodies are discarded.
 
 ## Implementation and release gates
 
@@ -103,23 +105,29 @@ transport must also enforce an input bound while reading it.
    channel image delivery. A guest-only build does not prove these behaviors.
 4. Verify one image with a real eligible subscription. Mark the minimum
    compatible host version accurately.
-5. Replace the root bridge-based plugin and packaging, remove the Python
-   service and its CI matrix, and distribute just the manifest and component
-   with any required license notices. Update the README around that supported
-   installation path and test the actual release archive.
+5. Document and test installation of the complete archive on that supported
+   host, then replace the proposed API contract with its agreed version and
+   enable public releases.
 
-Until these gates are met, the prototype is neither indexed nor included in a
-release. The existing root plugin is left intact so a design experiment does
-not turn into an advertised but unusable replacement.
+The Python bridge, loopback configuration, polling API, and separate prototype
+crate have been removed. The root crate, manifest, CI, and package all use the
+direct component. Python remains only in build and CI tooling and is excluded
+from the runtime archive.
 
-## Proof supplied by this PR
+Until the host gates are met, `registry = false` keeps the plugin out of registry
+discovery. CI produces a development archive for review; the release workflow
+runs `tools/check_release_ready.py` and refuses to publish the proposed contract.
 
-The [prototype](../prototypes/direct-wasm) contains a thin WIT shim, a direct
+## Validation boundary
+
+The [root implementation](../src/lib.rs) contains a thin WIT shim, a direct
 HTTP generation core, and host-fixture tests. Tests cover single-call success,
 fresh credential resolution, auth denial, header injection, fixed request
 parameters, provider/transport failures without automatic retry or error-body
-leakage, image validation/limits, and artifact errors. CI also builds the guest
-against the proposed interfaces.
+leakage, bounded response streaming, image validation/limits, and artifact
+errors. Packaging tests assert the complete archive contents and reproducible
+checksums, including exclusion of legacy bridge files. CI also builds the guest
+against the proposed interfaces and tests the publication guard.
 
 The host services themselves are not implemented in this repository. They need
 an upstream ZeroClaw change and review; no stock-host compatibility or live

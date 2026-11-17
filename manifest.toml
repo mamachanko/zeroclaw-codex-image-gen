@@ -1,31 +1,13 @@
 name = "codex-image-gen"
-version = "0.1.0"
-description = "Generate images using your existing Codex ChatGPT login via a local Codex bridge"
+version = "0.2.0-dev.0"
+description = "Direct Codex image generation using proposed host auth and artifact services"
 author = "mamachanko"
 wasm_path = "codex_image_gen.wasm"
 capabilities = ["tool"]
-# The registry packager ships only WASM/manifest; this plugin also needs the
-# local Python companion. Distribute the complete local package for now.
+# Development contract only: stock ZeroClaw does not implement these grants or
+# the zeroclaw:proposed-image-services imports. Public releases are gated.
 registry = false
-permissions = ["http_client", "config_read"]
+permissions = ["http_client", "codex_auth", "artifact_write"]
 
 [egress]
-hosts = ["127.0.0.1"]
-
-[config_schema]
-"$schema" = "https://json-schema.org/draft/2020-12/schema"
-type = "object"
-additionalProperties = false
-required = ["bridge_token"]
-
-[config_schema.properties.bridge_token]
-type = "string"
-minLength = 32
-x-secret = true
-description = "Local bridge token, not a Codex credential. Read from the bridge token file."
-
-[config_schema.properties.bridge_port]
-type = "integer"
-minimum = 1024
-maximum = 65535
-description = "Local bridge port. Default: 8787."
+hosts = ["chatgpt.com"]
