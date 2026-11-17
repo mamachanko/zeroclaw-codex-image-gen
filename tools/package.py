@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the built WASM component and its local bridge. Python 3.11+."""
+"""Package the WASM component, manifest, and notices. Development tooling only."""
 from pathlib import Path
 import hashlib
 import os
@@ -7,8 +7,7 @@ import tomllib
 import zipfile
 
 
-def main():
-    root = Path(__file__).resolve().parent.parent
+def build_package(root: Path) -> Path:
     manifest = tomllib.loads((root / "manifest.toml").read_text())
     cargo = tomllib.loads((root / "Cargo.toml").read_text())
     if manifest["version"] != cargo["package"]["version"]:
@@ -27,7 +26,7 @@ def main():
         manifest["wasm_path"]: data,
         **{path: (root / path).read_bytes() for path in (
             "manifest.toml", "README.md", "LICENSE", "NOTICE",
-            "bridge/codex_image_bridge.py", "wit/LICENSE-MIT", "wit/LICENSE-APACHE",
+            "wit/LICENSE-MIT", "wit/LICENSE-APACHE",
         )},
     }
     destination = root / "dist"
@@ -45,8 +44,11 @@ def main():
             raise SystemExit("Package integrity check failed")
     checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
     archive.with_suffix(".zip.sha256").write_text(f"{checksum}  {archive.name}\n")
-    print(archive)
-    print(f"sha256: {checksum}")
+    return archive
+
+
+def main():
+    print(build_package(Path(__file__).resolve().parent.parent))
 
 
 if __name__ == "__main__":

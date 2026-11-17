@@ -3,107 +3,135 @@ pub mod core;
 #[cfg(target_family = "wasm")]
 mod component {
     wit_bindgen::generate!({
-        path: "wit/v0",
-        world: "tool-plugin",
+        path: ["wit/v0", "wit/direct"],
+        world: "zeroclaw:proposed-image-services/direct-image-plugin@0.1.0",
         features: ["plugins-wit-v0"],
+        generate_all,
     });
-    use crate::core::{self, Request};
-    use exports::zeroclaw::plugin::plugin_info::Guest as PluginInfo;
-    use exports::zeroclaw::plugin::tool::{Guest as Tool, ToolResult};
-    use zeroclaw::plugin::{logging, secrets};
 
-    struct CodexImageGen;
+    use crate::core::{self, Artifact, Credentials, Host, HttpResponse};
+    use exports::zeroclaw::plugin::{plugin_info, tool};
+    use zeroclaw::proposed_image_services::{artifacts, codex_auth};
 
-    impl PluginInfo for CodexImageGen {
+    struct NativeHost;
+
+    impl Host for NativeHost {
+        fn credentials(&mut self) -> Result<Credentials, String> {
+            let auth = codex_auth::get().map_err(|error| match error {
+                codex_auth::AuthError::AccessDenied => "Codex auth is not granted to this plugin",
+                codex_auth::AuthError::LoginRequired => {
+                    "Sign in through the host's Codex authentication"
+                }
+                codex_auth::AuthError::Unavailable => {
+                    "The host's Codex auth service is unavailable"
+                }
+            })?;
+            Ok(Credentials {
+                access_token: auth.access_token,
+                account_id: auth.account_id,
+            })
+        }
+
+        fn post(
+            &mut self,
+            credentials: &Credentials,
+            body: Vec<u8>,
+        ) -> Result<HttpResponse, String> {
+            let response = waki::Client::new()
+                .post(core::ENDPOINT)
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", credentials.access_token),
+                )
+                .header("chatgpt-account-id", &credentials.account_id)
+                .header("Content-Type", "application/json")
+                .header("Content-Length", body.len().to_string())
+                .body(body)
+                .send()
+                .map_err(|_| "Codex image request failed; check the host's egress grant")?;
+            let status = response.status_code();
+            if status != 200 {
+                return Ok(HttpResponse {
+                    status,
+                    body: Vec::new(),
+                });
+            }
+            let body = core::read_bounded(
+                |limit| {
+                    response
+                        .chunk(limit)
+                        .map_err(|_| "Cannot read Codex image response".into())
+                },
+                core::MAX_RESPONSE_BYTES,
+            )?;
+            Ok(HttpResponse { status, body })
+        }
+
+        fn save_image(&mut self, bytes: &[u8]) -> Result<Artifact, String> {
+            let image = artifacts::save_image(bytes)
+                .map_err(|_| "The host could not save the generated image")?;
+            Ok(Artifact {
+                path: image.path,
+                size_bytes: image.size_bytes,
+            })
+        }
+    }
+
+    struct DirectImagePlugin;
+    impl plugin_info::Guest for DirectImagePlugin {
         fn plugin_name() -> String {
-            "codex-image-gen".into()
+            env!("CARGO_PKG_NAME").into()
         }
         fn plugin_version() -> String {
             env!("CARGO_PKG_VERSION").into()
         }
     }
-
-    fn execute_request(args: &str) -> Result<String, String> {
-        let call = core::parse_call(args)?;
-        let token = secrets::get("bridge_token").map_err(|_| "Missing bridge_token secret")?;
-        if token.len() < 32 || token.contains(['\r', '\n']) {
-            return Err("Invalid bridge_token secret".into());
-        }
-        let client = waki::Client::new();
-        let base = format!("http://127.0.0.1:{}", call.port);
-        let builder = match call.request {
-            Request::Generate {
-                prompt,
-                transparent_background,
-            } => {
-                let body = serde_json::json!({"prompt": prompt, "transparent_background": transparent_background}).to_string();
-                client
-                    .post(&format!("{base}/v1/jobs"))
-                    .header("Content-Type", "application/json")
-                    .header("Content-Length", body.len().to_string())
-                    .body(body)
-            }
-            Request::Status { job_id } => client.get(&format!("{base}/v1/jobs/{job_id}")),
-        };
-        let response = builder
-            .header("Authorization", format!("Bearer {token}"))
-            .send()
-            .map_err(|_| "Cannot reach Codex bridge; check service and plugin egress grants")?;
-        let status = response.status_code();
-        let body = response.body().map_err(|_| "Cannot read bridge response")?;
-        if body.len() > 65536 {
-            return Err("Bridge response too large".into());
-        }
-        core::response_output(status, &body)
-    }
-
-    impl Tool for CodexImageGen {
+    impl tool::Guest for DirectImagePlugin {
         fn name() -> String {
             "codex_image_gen".into()
         }
         fn description() -> String {
-            "Generate images using the local Codex subscription. Call action=generate once with a prompt. \
-             Then call action=status with the returned job_id until completed or failed. Status waits briefly; \
-             generation can take several minutes. Never resubmit a pending job. Return the completed \
-             [IMAGE:...] marker to the user. No FAL key or OpenAI API key is needed.".into()
+            "Generate one image with the host's existing Codex login. Provide a prompt and optional transparent_background. Return the [IMAGE:...] result.".into()
         }
         fn parameters_schema() -> String {
-            core::parameters_schema().to_string()
+            core::schema()
         }
-        fn execute(args: String) -> Result<ToolResult, String> {
-            let result = execute_request(&args);
-            let success = result.is_ok();
+        fn execute(args: String) -> Result<tool::ToolResult, String> {
+            let result = core::generate(&mut NativeHost, &args);
+            use zeroclaw::plugin::logging::{
+                self, LogLevel, PluginAction, PluginEvent, PluginOutcome,
+            };
             logging::log_record(
-                logging::LogLevel::Info,
-                &logging::PluginEvent {
-                    function_name: "codex_image_gen::execute".into(),
-                    action: if success {
-                        logging::PluginAction::Complete
+                LogLevel::Info,
+                &PluginEvent {
+                    function_name: "direct_codex_images::execute".into(),
+                    action: if result.is_ok() {
+                        PluginAction::Complete
                     } else {
-                        logging::PluginAction::Fail
+                        PluginAction::Fail
                     },
-                    outcome: Some(if success {
-                        logging::PluginOutcome::Success
+                    outcome: Some(if result.is_ok() {
+                        PluginOutcome::Success
                     } else {
-                        logging::PluginOutcome::Failure
+                        PluginOutcome::Failure
                     }),
                     duration_ms: None,
                     attrs: None,
-                    message: if success {
-                        "Codex bridge request completed"
+                    message: if result.is_ok() {
+                        "Direct image generation completed"
                     } else {
-                        "Codex bridge request failed"
+                        "Direct image generation failed"
                     }
                     .into(),
                 },
             );
             Ok(match result {
-                Ok(output) => ToolResult {
+                Ok(output) => tool::ToolResult {
                     success: true,
                     output,
                     error: None,
                 },
-                Err(error) => ToolResult {
+                Err(error) => tool::ToolResult {
                     success: false,
                     output: String::new(),
                     error: Some(error),
@@ -111,5 +139,5 @@ mod component {
             })
         }
     }
-    export!(CodexImageGen);
+    export!(DirectImagePlugin);
 }
