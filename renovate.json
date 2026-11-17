@@ -15,6 +15,11 @@
     {
       "matchManagers": ["cargo"],
       "groupName": "rust-dependencies"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["github-runner", "uses-with"],
+      "enabled": false
     }
   ]
 }

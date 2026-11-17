@@ -31,8 +31,9 @@ except for the release publication job, and PR runs do not use account secrets.
 the root crate and `prototypes/direct-wasm`, plus GitHub Actions references.
 Updates are grouped into `rust-dependencies` and `actions` PRs, including major
 updates, and scheduled for Mondays from 00:00 to 05:59 UTC. Action references
-remain pinned to commit digests. Dependency PRs use the normal CI and review
-process; automerging is disabled.
+remain pinned to commit digests. CI runner and language-version settings stay
+manually maintained. Dependency PRs use the normal CI and review process;
+automerging is disabled.
 
 The hosted Renovate GitHub App must have access to this repository. Enable it
 for `mamachanko/zeroclaw-codex-image-gen` when adopting this configuration; the
