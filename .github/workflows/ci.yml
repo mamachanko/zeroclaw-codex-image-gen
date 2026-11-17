@@ -6,18 +6,44 @@ on:
   pull_request:
   merge_group:
   workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Optional same-repository PR number; select its current head branch to verify it
+        required: false
+        type: string
   workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pull_request || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  target:
+    name: Verify CI target
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test manual target validation
+        run: python3 -m unittest discover -s tools -p 'test_*.py' -v
+      - name: Verify the selected PR head for a manual run
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_request }}
+        run: python3 tools/verify_ci_target.py
+
   workflows:
     name: Workflow validation
+    needs: target
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -29,6 +55,7 @@ jobs:
 
   bridge:
     name: Python ${{ matrix.python }}
+    needs: target
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -46,6 +73,7 @@ jobs:
 
   direct-wasm:
     name: Direct WASM prototype
+    needs: target
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -69,6 +97,7 @@ jobs:
 
   component:
     name: Rust and WASM package
+    needs: target
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -105,10 +134,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: ${{ always() }}
-    needs: [workflows, bridge, component, direct-wasm]
+    needs: [target, workflows, bridge, component, direct-wasm]
     steps:
       - name: Require every test and build job to succeed
         env:
           JOB_RESULTS: ${{ join(needs.*.result, ',') }}
         run: |
-          test "$JOB_RESULTS" = 'success,success,success,success'
+          test "$JOB_RESULTS" = 'success,success,success,success,success'
