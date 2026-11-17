@@ -25,6 +25,26 @@ fails if any dependency fails, is skipped, or is cancelled. CI also runs on
 `main`, merge queues, and manual requests. Workflows use read-only permissions
 except for the release publication job, and PR runs do not use account secrets.
 
+## Dependency updates
+
+[Renovate](https://github.com/apps/renovate) manages Cargo dependencies in both
+the root crate and `prototypes/direct-wasm`, plus GitHub Actions references.
+Updates are grouped into `rust-dependencies` and `actions` PRs, including major
+updates, and scheduled for Mondays from 00:00 to 05:59 UTC. Action references
+remain pinned to commit digests. Dependency PRs use the normal CI and review
+process; automerging is disabled.
+
+The hosted Renovate GitHub App must have access to this repository. Enable it
+for `mamachanko/zeroclaw-codex-image-gen` when adopting this configuration; the
+JSON file alone does not run the bot. No Renovate workflow or repository token
+is needed when using the hosted app. The configuration is in `renovate.json`.
+
+To validate configuration changes with Node.js 24.11 or newer in the 24.x line:
+
+```bash
+npx --yes --package=renovate@44.247.2 renovate-config-validator --strict renovate.json
+```
+
 ## Repository protection
 
 Configure a ruleset for `main` in **Settings → Rules → Rulesets**:

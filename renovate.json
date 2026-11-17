@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["cargo", "github-actions"],
+  "timezone": "Etc/UTC",
+  "schedule": ["* 0-5 * * 1"],
+  "automerge": false,
+  "separateMajorMinor": false,
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "actions",
+      "pinDigests": true
+    },
+    {
+      "matchManagers": ["cargo"],
+      "groupName": "rust-dependencies"
+    }
+  ]
+}
