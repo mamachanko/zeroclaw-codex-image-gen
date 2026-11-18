@@ -1,13 +1,32 @@
 name = "codex-image-gen"
-version = "0.2.0-dev.0"
-description = "Direct Codex image generation using proposed host auth and artifact services"
+version = "0.2.0-dev.1"
+description = "Generate Codex subscription images on stock ZeroClaw"
 author = "mamachanko"
 wasm_path = "codex_image_gen.wasm"
 capabilities = ["tool"]
-# Development contract only: stock ZeroClaw does not implement these grants or
-# the zeroclaw:proposed-image-services imports. Public releases are gated.
 registry = false
-permissions = ["http_client", "codex_auth", "artifact_write"]
+permissions = ["http_client", "config_read", "state_read", "state_write"]
 
 [egress]
-hosts = ["chatgpt.com"]
+hosts = ["auth.openai.com", "chatgpt.com", "127.0.0.1"]
+
+[config_schema]
+type = "object"
+additionalProperties = false
+required = ["gateway_port", "gateway_agent", "gateway_token"]
+
+[config_schema.properties.gateway_port]
+type = "integer"
+minimum = 1024
+maximum = 65535
+
+[config_schema.properties.gateway_agent]
+type = "string"
+minLength = 1
+maxLength = 64
+
+[config_schema.properties.gateway_token]
+type = "string"
+minLength = 1
+maxLength = 4096
+x-secret = true

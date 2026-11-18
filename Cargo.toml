@@ -1,6 +1,6 @@
 [package]
 name = "codex-image-gen"
-version = "0.2.0-dev.0"
+version = "0.2.0-dev.1"
 edition = "2021"
 license = "MIT"
 description = "Direct WASM image generation with host-managed Codex authentication"
@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 base64 = "0.23"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 wit-bindgen = "0.63"

@@ -288,3 +288,92 @@ fn caps_transport_reads_and_propagates_read_failure() {
     assert_eq!(error, "Cannot read Codex image response");
     assert_eq!(reads, 2);
 }
+
+#[derive(Default)]
+struct JobStore {
+    jobs: std::collections::HashMap<String, (Vec<u8>, u64)>,
+    lose_receipt: bool,
+}
+
+struct JobFixture {
+    image: Fixture,
+    state: JobStore,
+}
+
+impl Host for JobFixture {
+    fn credentials(&mut self) -> Result<Credentials, String> {
+        self.image.credentials()
+    }
+
+    fn post(&mut self, credentials: &Credentials, body: Vec<u8>) -> Result<HttpResponse, String> {
+        self.image.post(credentials, body)
+    }
+
+    fn save_image(&mut self, bytes: &[u8]) -> Result<Artifact, String> {
+        self.image.save_image(bytes)
+    }
+}
+
+impl core::JobHost for JobFixture {
+    fn job_get(&mut self, key: &str) -> Result<Option<(Vec<u8>, u64)>, String> {
+        Ok(self.state.jobs.get(key).cloned())
+    }
+
+    fn job_put(&mut self, key: &str, value: &[u8], expected: Option<u64>) -> Result<u64, String> {
+        let current = self.state.jobs.get(key).map(|(_, revision)| *revision);
+        if expected != current || (self.state.lose_receipt && expected.is_some()) {
+            return Err("State write refused".into());
+        }
+        let revision = current.unwrap_or_default() + 1;
+        self.state
+            .jobs
+            .insert(key.into(), (value.to_vec(), revision));
+        Ok(revision)
+    }
+}
+
+#[test]
+fn repeat_requests_read_the_saved_marker_without_regenerating() {
+    let mut host = JobFixture {
+        image: Fixture::new(),
+        state: JobStore::default(),
+    };
+    let marker = core::generate_once(&mut host, "same-id", "A blue circle".into(), false).unwrap();
+    let mut next_call = JobFixture {
+        image: Fixture::new(),
+        state: host.state,
+    };
+    assert_eq!(core::status(&mut next_call, "same-id").unwrap(), marker);
+    assert_eq!(
+        core::generate_once(&mut next_call, "same-id", "A blue circle".into(), false).unwrap(),
+        marker
+    );
+    assert!(
+        core::generate_once(&mut next_call, "same-id", "A green circle".into(), false)
+            .unwrap_err()
+            .contains("different image arguments")
+    );
+    assert!(next_call.image.calls.is_empty());
+}
+
+#[test]
+fn interrupted_receipt_never_causes_a_second_generation() {
+    let mut host = JobFixture {
+        image: Fixture::new(),
+        state: JobStore {
+            lose_receipt: true,
+            ..JobStore::default()
+        },
+    };
+    assert!(
+        core::generate_once(&mut host, "same-id", "A blue circle".into(), false)
+            .unwrap_err()
+            .contains("could not be recorded")
+    );
+    assert!(
+        core::generate_once(&mut host, "same-id", "A blue circle".into(), false)
+            .unwrap_err()
+            .contains("outcome is unknown")
+    );
+    assert_eq!(host.image.calls, ["auth", "http", "save"]);
+}

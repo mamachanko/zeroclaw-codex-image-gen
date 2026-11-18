@@ -121,22 +121,16 @@ no bypass actors and accepts the required check only from GitHub Actions.
 
 ## Direct WASM implementation
 
-The root crate is the direct WASM implementation; there is no companion
-service or separate prototype crate. Its host contract and integration gates
-are described in [`docs/direct-wasm.md`](docs/direct-wasm.md).
-Stock ZeroClaw does not implement its proposed auth and artifact services.
-CI packages the component for review, not for installation on an unmodified host.
+The root crate uses the stock plugin contract and the existing ZeroClaw
+gateway. See [direct WASM integration](docs/direct-wasm.md) for protocol
+ownership, recovery behavior, and live validation.
 
 ## Releases
 
-**Public releases are currently blocked.** `tools/check_release_ready.py`
-rejects the active `zeroclaw:proposed-image-services` contract before publication.
-Replacing that namespace alone does not establish compatibility: complete the
-host integration and live-validation gates in `docs/direct-wasm.md` first.
-
-Once those gates are met and the contract is supported, a maintainer can
-publish a release by creating and pushing a version tag. The tag must match
-`manifest.toml` and point to a commit reachable from `main`.
+The release workflow accepts stable package versions. Keep the development
+version until the plugin has completed a subscription generation on a
+supported host. To release, create a version tag matching `manifest.toml`
+and pointing to a commit reachable from `main`.
 
 The release workflow reruns CI, downloads its package artifact, verifies the
 SHA-256 checksum, and creates a GitHub release with the ZIP and checksum. Tags
